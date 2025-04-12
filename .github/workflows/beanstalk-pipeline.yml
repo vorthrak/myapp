@@ -66,4 +66,13 @@ jobs:
 
       - name: Upload Artifacts to S3
         run: |
-          aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}.zip
+          aws s3 cp artifacts.Zip s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}.zip
+        
+          
+          
+          
+          
+
+    
+
+      
