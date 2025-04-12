@@ -14,8 +14,8 @@ env:
 
 jobs:
   build-and-push:
-  name: Build and Push Docker Image
-  runs-on: ubuntu-latest 
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest 
 
   steps:
     - name: Checkout code
