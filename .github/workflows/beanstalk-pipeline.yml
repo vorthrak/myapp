@@ -17,56 +17,56 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest 
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }} 
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }} 
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+
+      - name: Login to Amazon ECR 
+        id: login-ecr 
+        uses: aws-actions/amazon-ecr-login@v2
         
+      - name: Build and push docker image to ECR 
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ env.EB_APPLICATION_NAME }}
+          IMAGE_TAG: ${{ env.PIPELINE_ID }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          
+      - name: create Dockerrun.aws.json
+        run: |
+          cat > Dockerrun.aws.json << EDF
+          {
+            "AWSEBDockerrunVersion": "1",
+            "Image": {
+              "Name": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME }}:{{ env.PIPELINE_ID }}",
+              "Update": "true"
+            },
+            "Ports": [
+              {
+                "ContainerPort": 3000,
+                "HostPort": 80
+                }
+              ]
+            }
+            EDF
 
-    - name: Login to Amazon ECR 
-      id: login-ecr 
-      uses: aws-actions/amazon-ecr-login@v2
-      
-    - name: Build and push docker image to ECR 
-      env:
-        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        REPOSITORY: ${{ env.EB_APPLICATION_NAME }}
-        IMAGE_TAG: ${{ env.PIPELINE_ID }}
-      run: |
-        docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
-        docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
-        
-    - name: create Dockerrun.aws.json
-      run: |
-        cat > Dockerrun.aws.json << EDF
-        {
-          "AWSEBDockerrunVersion": "1",
-          "Image": {
-            "Name": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME }}:{{ env.PIPELINE_ID }}",
-            "Update": "true"
-          },
-          "Ports": [
-            {
-              "ContainerPort": 3000,
-              "HostPort": 80
-              }
-            ]
-          }
-          EDF
+      - name: Zip Artifacts
+        run: zip -r artifacts.zip .
 
-    - name: Zip Artifacts
-      run: zip -r artifacts.zip .
-
-    - name: Upload Artifacts to S3
-      run: |
-        aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}
+      - name: Upload Artifacts to S3
+        run: |
+          aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}
         
           
           
