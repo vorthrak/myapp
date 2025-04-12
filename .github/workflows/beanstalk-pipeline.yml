@@ -35,24 +35,27 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2
       
     - name: Build and push docker image to ECR 
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPOSITORY: ${{ env.EB_APPLICATION_NAME }}
-          IMAGE_TAG: ${{ env.PIPELINE_ID }}
-        run: |
-          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
-
-   - name: create Dockerrun.aws.json
-        run: 
-          cat:Dockerrun.aws.json == EDF
-          {
-            "Image": {
-              "Name": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME }}:{{ env.PIPELINE_ID }}",
-            "Ports": [
-              {
-                "ContainerPort": 3000,
-                "HostPort": 80
+      env:
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REPOSITORY: ${{ env.EB_APPLICATION_NAME }}
+        IMAGE_TAG: ${{ env.PIPELINE_ID }}
+      run: |
+        docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+        docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+        
+    - name: create Dockerrun.aws.json
+      run: |
+        cat > Dockerrun.aws.json << EDF
+        {
+          "AWSEBDockerrunVersion": "1",
+          "Image": {
+            "Name": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME }}:{{ env.PIPELINE_ID }}",
+            "Update": "true"
+          },
+          "Ports": [
+            {
+              "ContainerPort": 3000,
+              "HostPort": 80
               }
             ]
           }
@@ -62,7 +65,7 @@ jobs:
       run: zip -r artifacts.zip .
 
     - name: Upload Artifacts to S3
-      run: 
+      run: |
         aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}
         
           
