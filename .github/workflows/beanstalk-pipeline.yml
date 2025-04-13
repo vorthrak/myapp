@@ -8,10 +8,10 @@ on:
 env:
   AWS_REGION: us-east-1 # AWS region
   S3_BUCKET: projects-artifacts-rico # S3 bucket for storing the build artifacts
-  EB_APPLICATION_NAME_PROD: elastic-beanstalk-2 # Elastic Beanstalk application name
-  EB_ENVIRONMENT_NAME_PROD: Elastic-beanstalk-2-env # Elastic Beanstalk environment name
-  EB_APPLICATION_NAME_STAGE: elastic-beanstalk-1 # Elastic Beanstalk application name
-  EB_ENVIRONMENT_NAME_STAGE: Elastic-beanstalk-1-env # Elastic Beanstalk environment name
+  EB_APPLICATION_NAME_PROD: elastic-beanstalk-1 # Elastic Beanstalk application name
+  EB_ENVIRONMENT_NAME_PROD: Elastic-beanstalk-1-env # Elastic Beanstalk environment name
+  EB_APPLICATION_NAME_STAGE:  # Elastic Beanstalk application name
+  EB_ENVIRONMENT_NAME_STAGE:  # Elastic Beanstalk environment name
   PIPELINE_ID: ${{ github.run_id }}
 
 jobs:
