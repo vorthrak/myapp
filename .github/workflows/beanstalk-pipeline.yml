@@ -10,7 +10,7 @@ env:
   S3_BUCKET: projects-artifacts-rico # S3 bucket for storing the build artifacts
   EB_APPLICATION_NAME_PROD: myapp # Elastic Beanstalk application name
   EB_ENVIRONMENT_NAME_PROD: myapp-env # Elastic Beanstalk environment name
-  EB_APPLICATION_NAME_STAGE: Elastic-beanstalk-1-env # Elastic Beanstalk application name
+  EB_APPLICATION_NAME_STAGE: elastic-beanstalk-1 # Elastic Beanstalk application name
   EB_ENVIRONMENT_NAME_STAGE: Elastic-beanstalk-1-env
  # Elastic Beanstalk environment name
   PIPELINE_ID: ${{ github.run_id }}
