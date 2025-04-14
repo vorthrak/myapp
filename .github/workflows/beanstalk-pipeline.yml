@@ -7,12 +7,11 @@ on:
       
 env:
   AWS_REGION: us-east-1 # AWS region
-  S3_BUCKET: projects-artifacts-rico # S3 bucket for storing the build artifacts
-  EB_APPLICATION_NAME_PROD: myapp # Elastic Beanstalk application name
+  S3_BUCKET: rico-projects-artifacts # S3 bucket for storing the build artifacts
+  EB_APPLICATION_NAME_STAGE: myapp # Elastic Beanstalk application name
   EB_ENVIRONMENT_NAME_PROD: myapp-env # Elastic Beanstalk environment name
-  EB_APPLICATION_NAME_STAGE: elastic-beanstalk-1 # Elastic Beanstalk application name
-  EB_ENVIRONMENT_NAME_STAGE: Elastic-beanstalk-1-env
- # Elastic Beanstalk environment name
+  EB_APPLICATION_NAME_DEV: myapp-stage # Elastic Beanstalk application name
+  EB_ENVIRONMENT_NAME_STAGE: myapp-stage-env # Elastic Beanstalk environment name
   PIPELINE_ID: ${{ github.run_id }}
 
 jobs:
@@ -41,7 +40,7 @@ jobs:
       - name: Build and push docker image to ECR
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPOSITORY: ${{ env.EB_APPLICATION_NAME_PROD }}
+          REPOSITORY: ${{ env.EB_APPLICATION_NAME_STAGE }}
           IMAGE_TAG: ${{ env.PIPELINE_ID }}
         run: |
           docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
@@ -53,7 +52,7 @@ jobs:
           {
             "AWSEBDockerrunVersion": "1",
             "Image": {
-              "Name": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_PROD }}:${{ env.PIPELINE_ID }}",
+              "Name": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.PIPELINE_ID }}",
               "Update": "true"
             },
             "Ports": [
@@ -65,17 +64,46 @@ jobs:
           }
           EOF
 
+      # - name: Generate ECS task definition file
+      #   env:
+      #     IMAGE_TAG: ${{ github.sha }}
+      #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      #     run: |
+      #       cat > task-def.json <<EOF
+      #       {
+      #         "family": "${TASK_FAMILY}",
+      #         "networkMode": "awsvpc",
+      #         "cpu": "256",
+      #         "memory": "512",
+      #         "requiresCompatibilities": ["FARGATE"],
+      #         "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole",
+      #         "containerDefinitions": [
+      #           {
+      #             "name": "${CONTAINER_NAME}",
+      #             "image": "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}",
+      #             "essential": true,
+      #             "portMappings": [
+      #               {
+      #                 "containerPort": 3000,
+      #                 "protocol": "tcp"
+      #               }
+      #             ]
+      #           }
+      #         ]
+      #       }
+      #       EOF
+
       - name: Zip Artifacts
         run: |
           zip -r artifacts.zip .
 
       - name: Upload Artifacts to S3
         run: |
-          aws s3 cp artifacts.zip s3://${{ env.S3_BUCKET }}/artifacts/${{ env.PIPELINE_ID }}/source-code.zip
-          aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/artifacts/${{ env.PIPELINE_ID }}/Dockerrun.aws.json
+          aws s3 cp artifacts.zip s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}.zip
+          aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/Dockerrun.aws.json-${{ env.PIPELINE_ID }}
 
-  deploy-stage:
-    name: Staging Deploy #Deploy to Staging Environment with Source Code
+  deploy-dev:
+    name: Development Deployment # Deploy to beanstalk from source
     needs: build-and-push
     runs-on: ubuntu-latest
 
@@ -91,41 +119,41 @@ jobs:
       - name: Create new Elastic Beanstalk application version
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
+            --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
             --version-label ${{ env.PIPELINE_ID }} \
-            --source-bundle S3Bucket="${{ env.S3_BUCKET }}",S3Key="artifacts/${{ env.PIPELINE_ID }}/Dockerrun.aws.json" \
+            --source-bundle S3Bucket="${{ env.S3_BUCKET }}",S3Key="artifacts-${{ env.PIPELINE_ID }}.zip" \
             --description "Deployment from GitHub Actions - ${{ github.run_id }}"
 
       - name: Deploy to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
-            --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
+            --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_STAGE }} \
             --version-label ${{ env.PIPELINE_ID }}
 
       - name: Wait for deployment to complete
         run: |
           aws elasticbeanstalk wait environment-updated \
-            --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
+            --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_STAGE }}
 
       # - name: Get deployment status
       #   run: |
       #     STATUS=$(aws elasticbeanstalk describe-environments \
-      #       --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
+      #       --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
       #       --environment-names ${{ env.EB_ENVIRONMENT_NAME_STAGE }} \
       #       --query "Environments[0].Status" \
       #       --output text)
       #     HEALTH=$(aws elasticbeanstalk describe-environments \
-      #       --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
+      #       --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
       #       --environment-names ${{ env.EB_ENVIRONMENT_NAME_STAGE }} \
       #       --query "Environments[0].Health" \
       #       --output text)
       #     echo "Deployment status: $STATUS"
       #     echo "Deployment health: $HEALTH"
 
-  deploy-prod:
-    name: Production Deploy # Deploy to Production Environment with Image from ECR
+  deploy-stage:
+    name: Staging Deployment # Deploy to beanstalk from image
     needs: build-and-push
     runs-on: ubuntu-latest
 
@@ -141,33 +169,33 @@ jobs:
       - name: Create new Elastic Beanstalk application version
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name ${{ env.EB_APPLICATION_NAME_PROD }} \
+            --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
             --version-label ${{ env.PIPELINE_ID }} \
-            --source-bundle S3Bucket="${{ env.S3_BUCKET }}",S3Key="artifacts/${{ env.PIPELINE_ID }}/source-code.zip" \
+            --source-bundle S3Bucket="${{ env.S3_BUCKET }}",S3Key="artifacts-${{ env.PIPELINE_ID }}.zip" \
             --description "Deployment from GitHub Actions - ${{ github.run_id }}"
       
       - name: Deploy to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
-            --application-name ${{ env.EB_APPLICATION_NAME_PROD }} \
+            --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_PROD }} \
             --version-label ${{ env.PIPELINE_ID }}
       
       - name: Wait for deployment to complete
         run: |
           aws elasticbeanstalk wait environment-updated \
-            --application-name ${{ env.EB_APPLICATION_NAME_PROD }} \
+            --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_PROD }}
 
       # - name: Get deployment status
       #   run: |
       #     STATUS=$(aws elasticbeanstalk describe-environments \
-      #       --application-name ${{ env.EB_APPLICATION_NAME_PROD }} \
+      #       --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
       #       --environment-names ${{ env.EB_ENVIRONMENT_NAME_PROD }} \
       #       --query "Environments[0].Status" \
       #       --output text)
       #     HEALTH=$(aws elasticbeanstalk describe-environments \
-      #       --application-name ${{ env.EB_APPLICATION_NAME_PROD }} \
+      #       --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
       #       --environment-names ${{ env.EB_ENVIRONMENT_NAME_PROD }} \
       #       --query "Environments[0].Health" \
       #       --output text)
