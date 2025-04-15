@@ -213,7 +213,7 @@ jobs:
       ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
       TASK_FAMILY: myapp-task
       EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
-      TASK_DEF_ARN: arn:aws:ecs:us-east-1:381491850253:task-definition/myapp-task:3
+      TASK_DEF_ARN: arn:aws:ecs:us-east-1:381491850253:task-definition/myapp-task:4
 
     steps:
       - name: Configure AWS credentials
