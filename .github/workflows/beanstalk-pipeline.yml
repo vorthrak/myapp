@@ -207,6 +207,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      PIPELINE_ID: ${{ github.run_id }}
       IMAGE_TAG: ${{ env.PIPELINE_ID }}
       CONTAINER_NAME: myapp-container
       ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
