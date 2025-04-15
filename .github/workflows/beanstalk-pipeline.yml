@@ -64,34 +64,34 @@ jobs:
           }
           EOF
 
-      - name: Generate ECS task definition file
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          run: |
-            cat > task-def.json <<EOF
-            {
-              "family": "${TASK_FAMILY}",
-              "networkMode": "awsvpc",
-              "cpu": "256",
-              "memory": "512",
-              "requiresCompatibilities": ["FARGATE"],
-              "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole",
-              "containerDefinitions": [
-                {
-                  "name": "${CONTAINER_NAME}",
-                  "image": "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}",
-                  "essential": true,
-                  "portMappings": [
-                    {
-                      "containerPort": 3000,
-                      "protocol": "tcp"
-                    }
-                  ]
-                }
-              ]
-            }
-            EOF
+      # - name: Generate ECS task definition file
+      #   env:
+      #     IMAGE_TAG: ${{ github.sha }}
+      #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      #     run: |
+      #       cat > task-def.json <<EOF
+      #       {
+      #         "family": "${TASK_FAMILY}",
+      #         "networkMode": "awsvpc",
+      #         "cpu": "256",
+      #         "memory": "512",
+      #         "requiresCompatibilities": ["FARGATE"],
+      #         "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole",
+      #         "containerDefinitions": [
+      #           {
+      #             "name": "${CONTAINER_NAME}",
+      #             "image": "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}",
+      #             "essential": true,
+      #             "portMappings": [
+      #               {
+      #                 "containerPort": 3000,
+      #                 "protocol": "tcp"
+      #               }
+      #             ]
+      #           }
+      #         ]
+      #       }
+      #       EOF
 
       - name: Zip Artifacts
         run: |
