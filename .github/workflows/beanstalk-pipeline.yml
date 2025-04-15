@@ -13,6 +13,12 @@ env:
   EB_APPLICATION_NAME_DEV: myapp-stage 
   EB_ENVIRONMENT_NAME_STAGE: myapp-stage-env 
   PIPELINE_ID: ${{ github.run_id }}
+  IMAGE_TAG: ${{ env.PIPELINE_ID }}
+  CONTAINER_NAME: myapp-container
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
+  TASK_FAMILY: myapp-task
+  EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
 
 jobs:
   build-and-push:
@@ -206,14 +212,14 @@ jobs:
     needs: [deploy-dev, deploy-stage]
     runs-on: ubuntu-latest
 
-    env:
-      PIPELINE_ID: ${{ github.run_id }}
-      IMAGE_TAG: ${{ env.PIPELINE_ID }}
-      CONTAINER_NAME: myapp-container
-      ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
-      ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
-      TASK_FAMILY: myapp-task
-      EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
+    # env:
+      # PIPELINE_ID: ${{ github.run_id }}
+      # IMAGE_TAG: ${{ env.PIPELINE_ID }}
+      # CONTAINER_NAME: myapp-container
+      # ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
+      # ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
+      # TASK_FAMILY: myapp-task
+      # EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
       # TASK_DEF_ARN: arn:aws:ecs:us-east-1:381491850253:task-definition/myapp-task:4
 
     steps:
