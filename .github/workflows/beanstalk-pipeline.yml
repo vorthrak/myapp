@@ -207,13 +207,13 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # IMAGE_TAG: ${{ env.PIPELINE_ID }}
+      IMAGE_TAG: ${{ env.PIPELINE_ID }}
       CONTAINER_NAME: myapp-container
       ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
       ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
       TASK_FAMILY: myapp-task
       EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
-      TASK_DEF_ARN: arn:aws:ecs:us-east-1:381491850253:task-definition/myapp-task:4
+      # TASK_DEF_ARN: arn:aws:ecs:us-east-1:381491850253:task-definition/myapp-task:4
 
     steps:
       - name: Configure AWS credentials
@@ -228,40 +228,40 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # - name: Create ECS task definition
-      #   run: |
-      #     cat > task-def.json <<EOF
-      #     {
-      #       "family": "${{ env.TASK_FAMILY }}",
-      #       "networkMode": "awsvpc",
-      #       "requiresCompatibilities": ["FARGATE"],
-      #       "cpu": "256",
-      #       "memory": "512",
-      #       "executionRoleArn": "${{ env.EXECUTION_ROLE_ARN }}",
-      #       "containerDefinitions": [
-      #         {
-      #           "name": "${{ env.CONTAINER_NAME }}",
-      #           "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}",
-      #           "essential": true,
-      #           "portMappings": [
-      #             {
-      #               "containerPort": 3000,
-      #               "protocol": "tcp"
-      #             }
-      #           ]
-      #         }
-      #       ]
-      #     }
-      #     EOF
+      - name: Create ECS task definition
+        run: |
+          cat > task-def.json <<EOF
+          {
+            "family": "${{ env.TASK_FAMILY }}",
+            "networkMode": "awsvpc",
+            "requiresCompatibilities": ["FARGATE"],
+            "cpu": "256",
+            "memory": "512",
+            "executionRoleArn": "${{ env.EXECUTION_ROLE_ARN }}",
+            "containerDefinitions": [
+              {
+                "name": "${{ env.CONTAINER_NAME }}",
+                "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}",
+                "essential": true,
+                "portMappings": [
+                  {
+                    "containerPort": 3000,
+                    "protocol": "tcp"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
 
-      # - name: Register ECS task definition
-      #   id: register-task
-      #   run: |
-      #     TASK_DEF_ARN=$(aws ecs register-task-definition \
-      #       --cli-input-json file://task-def.json \
-      #       --query 'taskDefinition.taskDefinitionArn' \
-      #       --output text)
-      #     echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+      - name: Register ECS task definition
+        id: register-task
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://task-def.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
 
       - name: Update ECS service to use new task definition
         run: |
