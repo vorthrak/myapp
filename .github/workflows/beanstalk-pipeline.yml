@@ -201,80 +201,80 @@ jobs:
       #       --output text)
       #     echo "Deployment status: $STATUS"
 
-  deploy-to-ecs:
-    name: Deploy to ECS (Production) # Deploy to ECS from image
-    needs: [deploy-dev, deploy-stage]
-    runs-on: ubuntu-latest
+  # deploy-to-ecs:
+  #   name: Deploy to ECS (Production) # Deploy to ECS from image
+  #   needs: [deploy-dev, deploy-stage]
+  #   runs-on: ubuntu-latest
 
-    env:
-      IMAGE_TAG: ${{ env.PIPELINE_ID }}
-      CONTAINER_NAME: myapp-container
-      ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
-      ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
-      TASK_FAMILY: myapp-task
-      EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
+  #   env:
+  #     IMAGE_TAG: ${{ env.PIPELINE_ID }}
+  #     CONTAINER_NAME: myapp-container
+  #     ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
+  #     ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
+  #     TASK_FAMILY: myapp-task
+  #     EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
 
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
+  #   steps:
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v2
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+  #     - name: Login to Amazon ECR
+  #       id: login-ecr
+  #       uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Create ECS task definition
-        run: |
-          cat > task-def.json <<EOF
-          {
-            "family": "${{ env.TASK_FAMILY }}",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "256",
-            "memory": "512",
-            "executionRoleArn": "${{ env.EXECUTION_ROLE_ARN }}",
-            "containerDefinitions": [
-              {
-                "name": "${{ env.CONTAINER_NAME }}",
-                "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}",
-                "essential": true,
-                "portMappings": [
-                  {
-                    "containerPort": 3000,
-                    "protocol": "tcp"
-                  }
-                ]
-              }
-            ]
-          }
-          EOF
+  #     - name: Create ECS task definition
+  #       run: |
+  #         cat > task-def.json <<EOF
+  #         {
+  #           "family": "${{ env.TASK_FAMILY }}",
+  #           "networkMode": "awsvpc",
+  #           "requiresCompatibilities": ["FARGATE"],
+  #           "cpu": "256",
+  #           "memory": "512",
+  #           "executionRoleArn": "${{ env.EXECUTION_ROLE_ARN }}",
+  #           "containerDefinitions": [
+  #             {
+  #               "name": "${{ env.CONTAINER_NAME }}",
+  #               "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}",
+  #               "essential": true,
+  #               "portMappings": [
+  #                 {
+  #                   "containerPort": 3000,
+  #                   "protocol": "tcp"
+  #                 }
+  #               ]
+  #             }
+  #           ]
+  #         }
+  #         EOF
 
-      - name: Register ECS task definition
-        id: register-task
-        run: |
-          TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://task-def.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+  #     - name: Register ECS task definition
+  #       id: register-task
+  #       run: |
+  #         TASK_DEF_ARN=$(aws ecs register-task-definition \
+  #           --cli-input-json file://task-def.json \
+  #           --query 'taskDefinition.taskDefinitionArn' \
+  #           --output text)
+  #         echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
 
-      - name: Update ECS service to use new task definition
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --task-definition ${{ env.TASK_DEF_ARN }}
+  #     - name: Update ECS service to use new task definition
+  #       run: |
+  #         aws ecs update-service \
+  #           --cluster ${{ env.ECS_CLUSTER }} \
+  #           --service ${{ env.ECS_SERVICE }} \
+  #           --task-definition ${{ env.TASK_DEF_ARN }}
 
-      - name: Wait for ECS deployment to complete
-        run: |
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
+  #     - name: Wait for ECS deployment to complete
+  #       run: |
+  #         aws ecs wait services-stable \
+  #           --cluster ${{ env.ECS_CLUSTER }} \
+  #           --services ${{ env.ECS_SERVICE }}
 
-      - name: Print ECS deployment status
-        run: |
-          echo "Deployed to ECS with task: ${{ env.TASK_DEF_ARN }}"
+  #     - name: Print ECS deployment status
+  #       run: |
+  #         echo "Deployed to ECS with task: ${{ env.TASK_DEF_ARN }}"
