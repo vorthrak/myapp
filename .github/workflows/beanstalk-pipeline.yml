@@ -1,36 +1,40 @@
+# Nama dari workflow ini di GitHub Actions
 name: Beanstalk Workflow
 
+# Menentukan kapan workflow ini akan berjalan
 on:
   push:
     branches:
-      - master
-      
-env:
-  AWS_REGION: us-east-1 
-  S3_BUCKET: rico-projects-artifacts 
-  EB_APPLICATION_NAME_STAGE: myapp 
-  EB_ENVIRONMENT_NAME_PROD: myapp-env 
-  EB_APPLICATION_NAME_DEV: myapp-stage 
-  EB_ENVIRONMENT_NAME_STAGE: myapp-stage-env 
-  PIPELINE_ID: ${{ github.run_id }}
-  IMAGE_TAG: ${{ github.run_id }}
-  CONTAINER_NAME: myapp-container
-  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
-  ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
-  TASK_FAMILY: myapp-task
-  EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
+      - master  # Workflow akan berjalan saat ada push ke branch master
 
+# Variabel lingkungan yang dapat digunakan di semua job dalam workflow
+env:
+  AWS_REGION: us-east-1  # Wilayah AWS yang digunakan
+  S3_BUCKET: rico-projects-artifacts  # Nama bucket S3 untuk menyimpan artifact
+  EB_APPLICATION_NAME_STAGE: myapp  # Nama aplikasi Elastic Beanstalk (untuk stage)
+  EB_ENVIRONMENT_NAME_PROD: myapp-env  # Nama environment untuk produksi
+  EB_APPLICATION_NAME_DEV: myapp-stage  # Nama aplikasi Beanstalk untuk development
+  EB_ENVIRONMENT_NAME_STAGE: myapp-stage-env  # Nama environment untuk staging
+  PIPELINE_ID: ${{ github.run_id }}  # ID unik untuk setiap pipeline yang dijalankan
+  IMAGE_TAG: ${{ github.run_id }}  # Tag image Docker, disamakan dengan run_id
+  CONTAINER_NAME: myapp-container  # Nama container dalam ECS
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}  # Cluster ECS yang diambil dari secrets
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}  # Nama service ECS
+  TASK_FAMILY: myapp-task  # Family task ECS
+  EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole  # ARN role ECS Fargate execution
+
+# Job pertama: Build dan Push Docker Image ke ECR
 jobs:
   build-and-push:
     name: Build and Push Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Jalankan job ini pada runner Ubuntu
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v3  # Ambil source code dari repo
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v2  # Setup credentials AWS untuk CLI
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -39,18 +43,16 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          aws-region: ${{ env.AWS_REGION }}
+        uses: aws-actions/amazon-ecr-login@v2  # Login ke ECR untuk akses Docker Registry
 
       - name: Build and push docker image to ECR
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPOSITORY: ${{ env.EB_APPLICATION_NAME_STAGE }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}  # Registry ECR yang telah login
+          REPOSITORY: ${{ env.EB_APPLICATION_NAME_STAGE }}  # Nama repo ECR
           IMAGE_TAG: ${{ env.PIPELINE_ID }}
         run: |
-          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .  # Build Docker image
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG  # Push image ke ECR
 
       - name: Create Dockerrun.aws.json
         run: |
@@ -69,48 +71,21 @@ jobs:
             ]
           }
           EOF
-
-      # - name: Generate ECS task definition file
-      #   env:
-      #     IMAGE_TAG: ${{ github.sha }}
-      #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      #     run: |
-      #       cat > task-def.json <<EOF
-      #       {
-      #         "family": "${TASK_FAMILY}",
-      #         "networkMode": "awsvpc",
-      #         "cpu": "256",
-      #         "memory": "512",
-      #         "requiresCompatibilities": ["FARGATE"],
-      #         "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole",
-      #         "containerDefinitions": [
-      #           {
-      #             "name": "${CONTAINER_NAME}",
-      #             "image": "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}",
-      #             "essential": true,
-      #             "portMappings": [
-      #               {
-      #                 "containerPort": 3000,
-      #                 "protocol": "tcp"
-      #               }
-      #             ]
-      #           }
-      #         ]
-      #       }
-      #       EOF
+        # Membuat file konfigurasi Dockerrun.aws.json yang diperlukan Elastic Beanstalk untuk Docker single container
 
       - name: Zip Artifacts
         run: |
-          zip -r artifacts.zip .
+          zip -r artifacts.zip .  # Meng-zip seluruh isi project untuk diupload ke S3
 
       - name: Upload Artifacts to S3
         run: |
-          aws s3 cp artifacts.zip s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}.zip
-          aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/Dockerrun.aws.json-${{ env.PIPELINE_ID }}
+          aws s3 cp artifacts.zip s3://${{ env.S3_BUCKET }}/artifacts-${{ env.PIPELINE_ID }}.zip  # Upload zip ke S3
+          aws s3 cp Dockerrun.aws.json s3://${{ env.S3_BUCKET }}/Dockerrun.aws.json-${{ env.PIPELINE_ID }}  # Upload Dockerrun config
 
+# Job kedua: Deployment ke environment development
   deploy-dev:
-    name: Development Deployment # Deploy to beanstalk from source
-    needs: build-and-push
+    name: Development Deployment 
+    needs: build-and-push  # Hanya jalan jika job build-and-push sukses
     runs-on: ubuntu-latest
 
     steps:
@@ -121,7 +96,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
-          
+
       - name: Create new Elastic Beanstalk application version
         run: |
           aws elasticbeanstalk create-application-version \
@@ -129,6 +104,7 @@ jobs:
             --version-label ${{ env.PIPELINE_ID }} \
             --source-bundle S3Bucket="${{ env.S3_BUCKET }}",S3Key="artifacts-${{ env.PIPELINE_ID }}.zip" \
             --description "Deployment from GitHub Actions - ${{ github.run_id }}"
+        # Membuat versi baru aplikasi Elastic Beanstalk dari zip yang diupload ke S3
 
       - name: Deploy to Elastic Beanstalk
         run: |
@@ -136,12 +112,14 @@ jobs:
             --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_STAGE }} \
             --version-label ${{ env.PIPELINE_ID }}
+        # Update environment development dengan versi terbaru
 
       - name: Wait for deployment to complete
         run: |
           aws elasticbeanstalk wait environment-updated \
             --application-name ${{ env.EB_APPLICATION_NAME_DEV }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_STAGE }}
+        # Tunggu hingga environment berhasil diperbarui
 
       # - name: Get deployment status
       #   run: |
@@ -157,9 +135,11 @@ jobs:
       #       --output text)
       #     echo "Deployment status: $STATUS"
       #     echo "Deployment health: $HEALTH"
+        # Menampilkan status dan kesehatan deployment
 
+# Job ketiga: Deployment ke environment staging
   deploy-stage:
-    name: Staging Deployment # Deploy to beanstalk from image
+    name: Staging Deployment 
     needs: build-and-push
     runs-on: ubuntu-latest
 
@@ -171,7 +151,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
-          
+
       - name: Create new Elastic Beanstalk application version
         run: |
           aws elasticbeanstalk create-application-version \
@@ -179,14 +159,14 @@ jobs:
             --version-label ${{ env.PIPELINE_ID }} \
             --source-bundle S3Bucket="${{ env.S3_BUCKET }}",S3Key="artifacts-${{ env.PIPELINE_ID }}.zip" \
             --description "Deployment from GitHub Actions - ${{ github.run_id }}"
-      
+
       - name: Deploy to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
             --application-name ${{ env.EB_APPLICATION_NAME_STAGE }} \
             --environment-name ${{ env.EB_ENVIRONMENT_NAME_PROD }} \
             --version-label ${{ env.PIPELINE_ID }}
-      
+
       - name: Wait for deployment to complete
         run: |
           aws elasticbeanstalk wait environment-updated \
@@ -207,82 +187,78 @@ jobs:
       #       --output text)
       #     echo "Deployment status: $STATUS"
 
-  deploy-to-ecs:
-    name: Deploy to ECS (Production) # Deploy to ECS from image
-    needs: [deploy-dev, deploy-stage]
-    runs-on: ubuntu-latest
+# Job terakhir: Deploy ke ECS (production)
+  # deploy-to-ecs:
+  #   name: Deploy to ECS (Production) 
+  #   needs: [deploy-dev, deploy-stage]  # Harus menunggu dev dan stage selesai
+  #   runs-on: ubuntu-latest
 
-    # env:
-      # PIPELINE_ID: ${{ github.run_id }}
-      # IMAGE_TAG: ${{ env.PIPELINE_ID }}
-      # CONTAINER_NAME: myapp-container
-      # ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
-      # ECS_SERVICE: ${{ secrets.ECS_SERVICE_NAME }}
-      # TASK_FAMILY: myapp-task
-      # EXECUTION_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LabRole
-      # TASK_DEF_ARN: arn:aws:ecs:us-east-1:381491850253:task-definition/myapp-task:4
+  #   steps:
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v2
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Login to Amazon ECR
+  #       id: login-ecr
+  #       uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+  #     - name: Create ECS task definition
+  #       run: |
+  #         cat > task-def.json <<EOF
+  #         {
+  #           "family": "${{ env.TASK_FAMILY }}",
+  #           "networkMode": "awsvpc",
+  #           "requiresCompatibilities": ["FARGATE"],
+  #           "cpu": "256",
+  #           "memory": "512",
+  #           "executionRoleArn": "${{ env.EXECUTION_ROLE_ARN }}",
+  #           "containerDefinitions": [
+  #             {
+  #               "name": "${{ env.CONTAINER_NAME }}",
+  #               "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}",
+  #               "essential": true,
+  #               "portMappings": [
+  #                 {
+  #                   "containerPort": 3000,
+  #                   "protocol": "tcp"
+  #                 }
+  #               ]
+  #             }
+  #           ]
+  #         }
+  #         EOF
+  #       # Buat definisi task ECS untuk deploy di Fargate
 
-      - name: Create ECS task definition
-        run: |
-          cat > task-def.json <<EOF
-          {
-            "family": "${{ env.TASK_FAMILY }}",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "256",
-            "memory": "512",
-            "executionRoleArn": "${{ env.EXECUTION_ROLE_ARN }}",
-            "containerDefinitions": [
-              {
-                "name": "${{ env.CONTAINER_NAME }}",
-                "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}",
-                "essential": true,
-                "portMappings": [
-                  {
-                    "containerPort": 3000,
-                    "protocol": "tcp"
-                  }
-                ]
-              }
-            ]
-          }
-          EOF
+  #     - name: Register ECS task definition
+  #       id: register-task
+  #       run: |
+  #         TASK_DEF_ARN=$(aws ecs register-task-definition \
+  #           --cli-input-json file://task-def.json \
+  #           --query 'taskDefinition.taskDefinitionArn' \
+  #           --output text)
+  #         echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+  #       # Register definisi task ke ECS dan simpan ARN ke environment GitHub
 
-      - name: Register ECS task definition
-        id: register-task
-        run: |
-          TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://task-def.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+  #     - name: Update ECS service to use new task definition
+  #       run: |
+  #         aws ecs update-service \
+  #           --cluster ${{ env.ECS_CLUSTER }} \
+  #           --service ${{ env.ECS_SERVICE }} \
+  #           --task-definition ${{ env.TASK_DEF_ARN }}
+  #       # Perbarui service ECS agar pakai task definition baru
 
-      - name: Update ECS service to use new task definition
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --task-definition ${{ env.TASK_DEF_ARN }}
+  #     - name: Wait for ECS deployment to complete
+  #       run: |
+  #         aws ecs wait services-stable \
+  #           --cluster ${{ env.ECS_CLUSTER }} \
+  #           --services ${{ env.ECS_SERVICE }}
+  #       # Tunggu sampai ECS deployment stabil
 
-      - name: Wait for ECS deployment to complete
-        run: |
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
-
-      - name: Print ECS deployment status
-        run: |
-          echo "Deployed to ECS with task: ${{ env.TASK_DEF_ARN }}"
+  #     - name: Print ECS deployment status
+  #       run: |
+  #         echo "Deployed to ECS with task: ${{ env.TASK_DEF_ARN }}"
+  #       # Cetak informasi deployment ECS
