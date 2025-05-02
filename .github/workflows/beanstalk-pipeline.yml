@@ -262,3 +262,77 @@ jobs:
         run: |
           echo "Deployed to ECS with task: ${{ env.TASK_DEF_ARN }}"
         # Cetak informasi deployment ECS
+
+# Job terakhir: Deploy ke EKS (Production)
+  deploy-to-eks:
+    name: Deploy to EKS (Production) 
+    needs: [deploy-dev, deploy-stage, deploy-to-ecs]  # Harus menunggu dev, stage, dan ECS selesai
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }} 
+        # Update kubeconfig untuk mengakses EKS cluster
+
+      - name: Build and Push Docker Image to ECR (EKS)
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ env.EB_APPLICATION_NAME_STAGE }}
+          IMAGE_TAG: ${{ env.PIPELINE_ID }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+        # Build dan Push Docker Image untuk EKS
+
+      - name: Create Kubernetes Deployment YAML
+        run: |
+          cat > k8s-deployment.yaml <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: myapp-deployment
+            labels:
+              app: myapp
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: myapp
+            template:
+              metadata:
+                labels:
+                  app: myapp
+              spec:
+                containers:
+                  - name: myapp-container
+                    image: ${{ steps.login-ecr.outputs.registry }}/${{ env.EB_APPLICATION_NAME_STAGE }}:${{ env.IMAGE_TAG }}
+                    ports:
+                      - containerPort: 3000
+          EOF
+        # Membuat file YAML untuk Kubernetes Deployment
+
+      - name: Apply Kubernetes Deployment
+        run: |
+          kubectl apply -f k8s-deployment.yaml
+        # Terapkan deployment ke EKS
+
+      - name: Wait for Deployment to Complete
+        run: |
+          kubectl rollout status deployment/myapp-deployment
+        # Tunggu deployment selesai
+
+      - name: Get EKS Deployment Status
+        run: |
+          kubectl get pods -l app=myapp
+        # Ambil status pod yang dideploy di EKS
