@@ -3,7 +3,7 @@ name: Beanstalk Workflow
 
 # Menentukan kapan workflow ini akan berjalan
 on:
-  push:
+  push: 
     branches:
       - master  # Workflow akan berjalan saat ada push ke branch master
 
